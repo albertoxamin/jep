@@ -324,11 +324,8 @@
   #termChipBtn { display: inline-flex; align-items: center; gap: 6px; border: none; border-radius: 999px; padding: 4px 12px; background: var(--bubble); font-size: 13px; }
   #termChipBtn svg { fill: currentColor; }
   #termChipList { margin-top: 6px; border: 1px solid var(--line); border-radius: 12px; overflow: hidden; background: var(--bg); }
-  #termChipList .row { display: flex; align-items: center; border-top: 1px solid var(--line); }
-  #termChipList .row:first-child { border-top: none; }
-  #termChipList .name { flex: 1; min-width: 0; border: none; background: none; text-align: left; padding: 8px 12px; font: 13px/1.3 ui-monospace, Menlo, monospace; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  #termChipList .x { border: none; background: none; color: var(--dim); padding: 8px 12px; font-size: 16px; line-height: 1; }
-  #termChipList .x:hover { color: var(--accent); }
+  #termChipList .name { display: block; width: 100%; border: none; border-top: 1px solid var(--line); background: none; text-align: left; padding: 8px 12px; font: 13px/1.3 ui-monospace, Menlo, monospace; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  #termChipList .name:first-child { border-top: none; }
   textarea {
     flex: 1; resize: none; max-height: 40vh; min-height: 42px; padding: 10px 12px;
     background: var(--bubble); border: 1px solid var(--line); border-radius: 12px; outline: none;
@@ -2740,21 +2737,11 @@ function syncTermBtn() {
   if (key === jobsKey) return
   jobsKey = key
   $("termChipList").replaceChildren(...jobs.map((j) => {
-    const row = el("div", "row")
     const name = el("button", "name", j.command)
     name.type = "button"
     name.title = j.command
     name.onclick = () => openShell(j.id).catch((err) => fail(err))
-    const x = el("button", "x", "×")
-    x.type = "button"
-    x.title = "Stop this command"
-    x.setAttribute("aria-label", "Stop " + j.command)
-    x.onclick = (e) => {
-      e.stopPropagation()
-      call("/stop", { id: current }).catch((err) => fail(err))
-    }
-    row.append(name, x)
-    return row
+    return name
   }))
 }
 function renderShells() {

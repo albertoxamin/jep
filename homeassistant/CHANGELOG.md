@@ -1,9 +1,13 @@
 # Changelog — the HA app
 
+## 0.3.3
+
+The terminal list no longer has a stop button. A row only opens that log.
+
 ## 0.3.2
 
 Running commands sit in a chip above the message box. The chip opens a
-list. A row opens that log in the sidebar. × stops the turn.
+list. A row opens that log in the sidebar.
 
 ## 0.3.1
 
