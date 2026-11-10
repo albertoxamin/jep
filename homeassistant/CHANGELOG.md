@@ -1,5 +1,10 @@
 # Changelog — the HA app
 
+## 0.3.2
+
+Running commands sit in a chip above the message box. The chip opens a
+list. A row opens that log in the sidebar. × stops the turn.
+
 ## 0.3.1
 
 Home Assistant image metadata now identifies the version and architecture.

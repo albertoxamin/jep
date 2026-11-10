@@ -320,6 +320,15 @@
   #ctx .legend div { display: flex; align-items: center; gap: 8px; font-size: 12px; }
   #ctx .sw { width: 8px; height: 8px; border-radius: 2px; flex: none; }
   #ctx .legend b { margin-left: auto; font-weight: 500; }
+  #termChip { max-width: 780px; margin: 0 auto 8px; }
+  #termChipBtn { display: inline-flex; align-items: center; gap: 6px; border: none; border-radius: 999px; padding: 4px 12px; background: var(--bubble); font-size: 13px; }
+  #termChipBtn svg { fill: currentColor; }
+  #termChipList { margin-top: 6px; border: 1px solid var(--line); border-radius: 12px; overflow: hidden; background: var(--bg); }
+  #termChipList .row { display: flex; align-items: center; border-top: 1px solid var(--line); }
+  #termChipList .row:first-child { border-top: none; }
+  #termChipList .name { flex: 1; min-width: 0; border: none; background: none; text-align: left; padding: 8px 12px; font: 13px/1.3 ui-monospace, Menlo, monospace; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  #termChipList .x { border: none; background: none; color: var(--dim); padding: 8px 12px; font-size: 16px; line-height: 1; }
+  #termChipList .x:hover { color: var(--accent); }
   textarea {
     flex: 1; resize: none; max-height: 40vh; min-height: 42px; padding: 10px 12px;
     background: var(--bubble); border: 1px solid var(--line); border-radius: 12px; outline: none;
@@ -465,6 +474,10 @@ document.write('<link rel="stylesheet" href="v2.css">'
       <label><input type="radio" name="mode" value="now"><span>Now</span></label>
     </div>
     <div id="ctx" hidden></div>
+    <div id="termChip" hidden>
+      <button type="button" id="termChipBtn" aria-expanded="false"><svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><circle cx="3.5" cy="4" r="1.2"/><circle cx="8" cy="4" r="1.2"/><circle cx="12.5" cy="4" r="1.2"/><circle cx="3.5" cy="8" r="1.2"/><circle cx="8" cy="8" r="1.2"/><circle cx="12.5" cy="8" r="1.2"/></svg><span id="termChipLabel">1 Terminal</span></button>
+      <div id="termChipList" hidden></div>
+    </div>
     <div class="box">
       <textarea id="input" rows="1" placeholder="Message"></textarea>
       <button type="button" id="stop" title="Stop the running turn" hidden><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="7" y="7" width="10" height="10" rx="1.5"/></svg>Stop</button>
@@ -2717,30 +2730,35 @@ function shells() {
   return [...rows.filter((r) => r.running), ...rows.filter((r) => !r.running).slice(-6).reverse()]
 }
 function syncTermBtn() {
-  const running = shells().some((s) => s.running)
-  $("termBtn").hidden = !termAllowed && !running
-  const n = shells().filter((s) => s.running).length
-  $("termCount").hidden = !n
-  $("termCount").textContent = n ? String(n) : ""
+  $("termBtn").hidden = !termAllowed
+  const jobs = shells().filter((s) => s.running)
+  const chip = $("termChip")
+  chip.hidden = !jobs.length
+  $("termChipLabel").textContent = jobs.length === 1 ? "1 Terminal" : jobs.length + " Terminals"
+  if (!jobs.length) $("termChipList").hidden = true
+  const key = jobs.map((j) => j.id).join("|")
+  if (key === jobsKey) return
+  jobsKey = key
+  $("termChipList").replaceChildren(...jobs.map((j) => {
+    const row = el("div", "row")
+    const name = el("button", "name", j.command)
+    name.type = "button"
+    name.title = j.command
+    name.onclick = () => openShell(j.id).catch((err) => fail(err))
+    const x = el("button", "x", "×")
+    x.type = "button"
+    x.title = "Stop this command"
+    x.setAttribute("aria-label", "Stop " + j.command)
+    x.onclick = (e) => {
+      e.stopPropagation()
+      call("/stop", { id: current }).catch((err) => fail(err))
+    }
+    row.append(name, x)
+    return row
+  }))
 }
 function renderShells() {
   syncTermBtn()
-  if ($("termPane").hidden) return
-  const jobs = shells()
-  const key = jobs.map((j) => j.id + (j.running ? "!" : "")).join("|") + ":" + (termWatch || "")
-  if (key !== jobsKey) {
-    jobsKey = key
-    const box = $("termJobs")
-    box.hidden = !jobs.length
-    box.replaceChildren(...jobs.map((j) => {
-      const b = el("button", (j.id === termWatch ? "on" : "") + (j.running ? " run" : ""))
-      b.type = "button"
-      b.title = j.command
-      b.textContent = (j.running ? "● " : "") + j.command
-      b.onclick = () => watchJob(j.id)
-      return b
-    }))
-  }
   if (termWatch) paintLog()
 }
 function paintLog() {
@@ -2760,7 +2778,6 @@ function watchJob(id) {
     termView.options.cursorBlink = false
   }
   $("termLive").hidden = !termAllowed
-  jobsKey = ""
   renderShells()
 }
 async function termAvailable() {
@@ -2874,9 +2891,20 @@ function rebindTerm() {
 async function openTerm() {
   if (!current) return
   if (!$("termPane").hidden) { closeTerm(); return }
-  const running = shells().find((s) => s.running)
-  if (!termAllowed && !running) return
+  if (!termAllowed) return
   await showPane()
+  armTerm()
+  const st = await call("/term", {})
+  let unlocked = st.authorized
+  if (!unlocked) {
+    const code = window.prompt("Pairing code to unlock the terminal")
+    if (code) { await call("/term/unlock", { code: code.trim() }); unlocked = true }
+    else { closeTerm(); return }
+  }
+  if (unlocked) await startLive()
+  else renderShells()
+}
+async function armTerm() {
   if (termResize) termResize.disconnect()
   termResize = new ResizeObserver(() => {
     clearTimeout(termFitTimer)
@@ -2889,18 +2917,21 @@ async function openTerm() {
     if (termWatch) paintLog()
     else if (current && termAllowed) paintTerm().catch(() => {})
   }, 200)
-  if (termAllowed) {
-    const st = await call("/term", {})
-    let unlocked = st.authorized
-    if (!unlocked) {
-      const code = window.prompt("Pairing code to unlock the terminal")
-      if (code) { await call("/term/unlock", { code: code.trim() }); unlocked = true }
-      else if (!running) { closeTerm(); return }
-    }
-    if (unlocked) await startLive()
+}
+async function openShell(id) {
+  if (!current) return
+  $("termChipList").hidden = true
+  $("termChipBtn").setAttribute("aria-expanded", "false")
+  if ($("termPane").hidden) {
+    await showPane()
+    armTerm()
   }
-  if (running) watchJob(running.id)
-  else renderShells()
+  watchJob(id)
+}
+$("termChipBtn").onclick = () => {
+  const list = $("termChipList")
+  list.hidden = !list.hidden
+  $("termChipBtn").setAttribute("aria-expanded", String(!list.hidden))
 }
 $("termBtn").onclick = () => openTerm().catch((err) => fail(err))
 $("tabTerm").onclick = () => { if ($("termPane").hidden) openTerm().catch((err) => fail(err)) }
