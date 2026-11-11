@@ -1,5 +1,11 @@
 # Changelog — the HA app
 
+## 0.3.4
+
+The app pulls `ghcr.io/<this GitHub repo>/{arch}-jep`. A fork no longer
+asks Home Assistant for the upstream tag. A merge that puts the other
+name back is corrected on the next push to main.
+
 ## 0.3.3
 
 The terminal list no longer has a stop button. A row only opens that log.

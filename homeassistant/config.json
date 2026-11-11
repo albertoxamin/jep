@@ -1,14 +1,14 @@
 {
   "name": "Jep",
-  "version": "0.3.3",
+  "version": "0.3.4",
   "slug": "jep",
   "description": "One interface for every coding agent: Telegram and web gateway clients for opencode",
-  "url": "https://github.com/tinybig-ai/jep/tree/main/homeassistant",
+  "url": "https://github.com/albertoxamin/jep/tree/main/homeassistant",
   "arch": [
     "aarch64",
     "amd64"
   ],
-  "image": "ghcr.io/tinybig-ai/{arch}-jep",
+  "image": "ghcr.io/albertoxamin/{arch}-jep",
   "startup": "services",
   "boot": "auto",
   "tmpfs": true,

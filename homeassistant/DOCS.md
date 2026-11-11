@@ -65,10 +65,11 @@ push, wait for CI, then reinstall/update the app in HA. CI builds the exact
 `JEP_SHA` commit from `JEP_REPO`, so a branch moving during the build cannot
 silently change the source. Local builds use `JEP_REF` when no SHA is supplied.
 
-The upstream image prefix is `ghcr.io/tinybig-ai/{arch}-jep`. Both architecture
-packages must be public. Fork releases use their own owner in `image` and the
-root repository metadata; CI rejects a registry owner that does not match the
-publishing repository. Keep the app version and registry tags in step.
+The image prefix is `ghcr.io/<the owner of the GitHub repo you added>/{arch}-jep`.
+This checkout uses `ghcr.io/albertoxamin/{arch}-jep`. Upstream uses
+`ghcr.io/tinybig-ai/{arch}-jep`. CI rejects a publish whose `image` owner
+is not the repository it is running in, and a push to main rewrites
+`config.json` and `repository.json` when a merge left the other fork's name.
 
 Maintainers: if GitHub says visibility is disabled by organization administrators,
 an organization owner must first enable **Public** under **Package Creation** in
