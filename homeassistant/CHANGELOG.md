@@ -1,5 +1,10 @@
 # Changelog — the HA app
 
+## 0.3.5
+
+`/model openrouter/baidu/ernie-5.5-flash-preview` stays that id. A longer
+`:free` row is no longer treated as the same model.
+
 ## 0.3.4
 
 The app pulls `ghcr.io/<this GitHub repo>/{arch}-jep`. A fork no longer
