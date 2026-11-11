@@ -8,6 +8,7 @@ import { setTimeout as delay } from "node:timers/promises"
 const [image, platform] = process.argv.slice(2)
 if (!image || !/^linux\/(amd64|arm64)$/.test(platform ?? "")) throw new Error("Usage: node scripts/smoke-ha-image.mjs IMAGE linux/amd64|linux/arm64")
 const config = JSON.parse(readFileSync(new URL("../homeassistant/config.json", import.meta.url)))
+const pkg = JSON.parse(readFileSync(new URL("../package.json", import.meta.url)))
 const name = `jep-ha-smoke-${process.pid}`
 const docker = (...args) => execFileSync("docker", args, { encoding: "utf8", timeout: 180_000, stdio: "pipe" }).trim()
 const inside = (code, ...args) => docker("exec", name, "node", "--input-type=module", "-e",
@@ -43,7 +44,7 @@ try {
     `node -e "require('node:fs').writeFileSync('/data/options.json', Buffer.from(process.env.JEP_SMOKE_OPTIONS, 'base64'))" && exec /run.sh`)
   await ready()
   assert.match(docker("exec", name, "opencode", "--version"), /\d+\.\d+\.\d+/)
-  assert.equal(docker("exec", name, "jep", "--version"), config.version)
+  assert.equal(docker("exec", name, "jep", "--version"), pkg.version)
   for (const tool of ["jep-watch", "jep-send", "jep-show", "jep-rename", "jep-read", "jep-tell", "jep-restart"]) {
     docker("exec", name, "test", "-x", `/usr/local/bin/${tool}`)
   }
