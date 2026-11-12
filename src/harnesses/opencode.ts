@@ -14,7 +14,7 @@ import type { ServerLoad } from "../core/recycle.ts"
 import { MCP_SERVER_PATH, TOOLS_SERVER, toolsMode, wantsMcp } from "../core/tools.ts"
 import { quoteBlock, readQuoteBlock, contextFor } from "../core/transcript.ts"
 import { parseOptionIDs } from "../core/questions.ts"
-import { parseOpencodeLogError } from "./opencode-log.ts"
+import { describeError } from "../core/errors.ts"
 import { detach } from "../core/detach.ts"
 import { setTimeout as pollDelay } from "node:timers/promises"
 const OPENCODE_BIN = process.env.OPENCODE_BIN ?? "opencode"
@@ -723,7 +723,13 @@ export class OpenCodeAdapter implements HarnessAdapter {
       })
       if (!res.ok) {
         const textError = await res.text().catch(() => "")
-        throw new Error(`prompt -> ${res.status}: ${textError.slice(0, 200)}`)
+        // the useful sentence is on stderr and can land a moment after the 500
+        let named = this.providerError(sessionID) ?? this.#recentProviderError()
+        if (!named) {
+          await pollDelay(100)
+          named = this.providerError(sessionID) ?? this.#recentProviderError()
+        }
+        throw new Error(named ? describeError(named) : `prompt -> ${res.status}: ${textError.slice(0, 200)}`)
       }
       const data = (await res.json()) as { info?: any; parts?: any[] }
       return mapMessage(data.info ?? {}, data.parts ?? [], this.workspace)
@@ -924,6 +930,12 @@ export class OpenCodeAdapter implements HarnessAdapter {
   // 429 never gets blamed for an unrelated stall minutes later.
   providerError(sessionID: string): HarnessError | null {
     return this.#providerErrors.get(toNativeId(sessionID))?.error ?? null
+  }
+
+  // a provider failure opencode logged without a session id, if it just happened
+  #recentProviderError(): HarnessError | null {
+    const any = this.#providerErrors.get("*")
+    return any && Date.now() - any.at < 15_000 ? any.error : null
   }
 
   /**
@@ -1545,7 +1557,11 @@ async function spawnOpenCodeServer(key: string, opts?: { dataHome?: string }): P
     for (const line of chunk.toString().split("\n")) {
       if (!line.trim()) continue
       const err = parseOpencodeLogError(line)
-      if (err) providerErrors.set(err.sessionID, { error: err.error, at: Date.now() })
+      if (err) {
+        const slot = { error: err.error, at: Date.now() }
+        if (err.sessionID) providerErrors.set(err.sessionID, slot)
+        providerErrors.set("*", slot)
+      }
       if (err || /\blevel=(ERROR|WARN)\b/.test(line)) console.error(`[opencode:${tag}] ${line}`)
     }
   }

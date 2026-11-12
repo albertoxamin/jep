@@ -1,5 +1,10 @@
 # Changelog — the HA app
 
+## 0.3.7
+
+A failed prompt in the chat names the provider error, such as
+`APIError (HTTP 401): User not found.`, instead of a raw 500.
+
 ## 0.3.6
 
 Each running command in the terminal list shows how long it has been going.
