@@ -1,5 +1,10 @@
 # Changelog — the HA app
 
+## 0.3.11
+
+A provider failure stays in the chat after the message is saved. The
+rate-limit line no longer disappears when the toast does.
+
 ## 0.3.10
 
 A failed turn writes the provider's sentence in the chat, under the

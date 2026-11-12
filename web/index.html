@@ -727,6 +727,7 @@ let live = new Map()      // partID → { messageID, part } streamed since the l
 const roles = new Map()   // messageID → role, as the feed announces them
 const sending = new Map() // session → prompts of ours still in flight
 let pendingText = []      // sends the record does not show yet
+const turnErrors = []     // a failed send, kept after the words land in the record: {text, at, error}
 let queue = []            // the daemon's prompts waiting behind the running turn, in order
 let loop = null           // the loop this conversation is running, if any
 let attachments = []      // files uploaded for the next prompt
@@ -1096,8 +1097,11 @@ async function readHistory() {
   const joined = messages.filter((m) => m.role === "user" && m.time).map((m) => ({ time: m.time, pieces: new Set(textOf(m).split("\n\n").map((t) => t.trim())) }))
   // (an earlier message with the same words is not this one: "go on" twice)
   const now = Date.now()
-  pendingText = pendingText.filter((p) => !(p.sentAt && joined.some((m) => m.time >= p.sentAt - 5000 && (m.pieces.has(p.text.trim()) || [...m.pieces].join("\n\n") === p.text.trim())))
-    && !(p.answeredAt && now - p.answeredAt > 15_000))
+  pendingText = pendingText.filter((p) => {
+    const absorbed = p.sentAt && joined.some((m) => m.time >= p.sentAt - 5000 && (m.pieces.has(p.text.trim()) || [...m.pieces].join("\n\n") === p.text.trim()))
+    if ((absorbed || (p.answeredAt && now - p.answeredAt > 15_000)) && p.error) noteTurnError(p.text, p.sentAt || now, p.error)
+    return !absorbed && !(p.answeredAt && now - p.answeredAt > 15_000)
+  })
   const seen = new Set(messages.flatMap((m) => [m.id, ...m.parts.map((p) => p.id)]))
   for (const [pid, l] of live) if (seen.has(pid) || seen.has(l.messageID)) live.delete(pid)
   render()
@@ -1498,7 +1502,8 @@ function transcript(all) {
       if (m.from) { out.push(guestNode(m)); continue }
       if (saysNothing(m)) continue
       // a failed send, or a reply that came back as an error, keeps Edit and Retry on screen
-      const failed = !m.queued && (!!m.undelivered || turnFailed(i))
+      const noted = m.errorText || notedError(m)
+      const failed = !m.queued && (!!m.undelivered || turnFailed(i) || !!noted)
       const node = messageNode("user", m.parts, null, m.id)
       node.prepend(userNav(node))
       if (m.time) node.dataset.info = when(m.time)
@@ -1508,7 +1513,7 @@ function transcript(all) {
         node.querySelector(".body").dataset.state = "Sending…"
       } else sentActions(node, m)
       if (failed) node.classList.add("keep-actions")
-      if (m.errorText) node.append(failNote(m.errorText))
+      if (m.errorText || noted) node.append(failNote(m.errorText || noted))
       out.push(node)
       continue
     }
@@ -1532,6 +1537,19 @@ function transcript(all) {
 }
 
 // "14:32 · claude-opus-5-5 · 1m 13s · 171k in, 300 out · $0.42", whatever the harness reported
+function noteTurnError(text, at, error) {
+  const t = (text || "").trim()
+  if (!t || !error) return
+  const i = turnErrors.findIndex((e) => e.text === t && Math.abs(e.at - at) < 20_000)
+  if (i >= 0) turnErrors[i] = { text: t, at, error }
+  else turnErrors.push({ text: t, at, error })
+  if (turnErrors.length > 40) turnErrors.shift()
+}
+function notedError(m) {
+  const t = textOf(m).trim()
+  const at = m.time || 0
+  return turnErrors.find((e) => e.text === t && (!at || Math.abs(e.at - at) < 20_000))?.error || ""
+}
 function errorText(e) {
   if (!e) return ""
   if (typeof e === "string") return e
@@ -2332,7 +2350,10 @@ function follow() {
     }
     if (evt.type === "session.idle" || evt.type === "turn.aborted") { markSeen(); loadStatus() }
     if (evt.type === "session.error") {
-      if (evt.sessionID !== current) notifyFailure(evt.sessionID, evt.message)
+      if (evt.sessionID === current) {
+        const last = [...messages].reverse().find((m) => m.role === "user" && textOf(m).trim())
+        if (last) { noteTurnError(textOf(last), last.time || Date.now(), evt.message); render() }
+      } else notifyFailure(evt.sessionID, evt.message)
       fail(new Error(evt.message))
     }
     // the record itself moved: read it again, but not on every event
