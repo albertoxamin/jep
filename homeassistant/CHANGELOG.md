@@ -1,5 +1,11 @@
 # Changelog — the HA app
 
+## 0.3.6
+
+Each running command in the terminal list shows how long it has been going.
+The context panel skips a failed turn that reported zero tokens, and says
+when the harness has not reported usage at all.
+
 ## 0.3.5
 
 `/model openrouter/baidu/ernie-5.5-flash-preview` stays that id. A longer

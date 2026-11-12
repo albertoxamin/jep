@@ -324,8 +324,10 @@
   #termChipBtn { display: inline-flex; align-items: center; gap: 6px; border: none; border-radius: 999px; padding: 4px 12px; background: var(--bubble); font-size: 13px; }
   #termChipBtn svg { fill: currentColor; }
   #termChipList { margin-top: 6px; border: 1px solid var(--line); border-radius: 12px; overflow: hidden; background: var(--bg); }
-  #termChipList .name { display: block; width: 100%; border: none; border-top: 1px solid var(--line); background: none; text-align: left; padding: 8px 12px; font: 13px/1.3 ui-monospace, Menlo, monospace; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  #termChipList .name { display: flex; align-items: baseline; gap: 8px; width: 100%; border: none; border-top: 1px solid var(--line); background: none; text-align: left; padding: 8px 12px; font: 13px/1.3 ui-monospace, Menlo, monospace; }
   #termChipList .name:first-child { border-top: none; }
+  #termChipList .cmd { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  #termChipList .age { flex: none; color: var(--dim); }
   textarea {
     flex: 1; resize: none; max-height: 40vh; min-height: 42px; padding: 10px 12px;
     background: var(--bubble); border: 1px solid var(--line); border-radius: 12px; outline: none;
@@ -2511,8 +2513,14 @@ function renderStatus() {
 // The ring under Send is the last reply's prompt against the model's window.
 // The slices are the token counts the harness reported. jep does not split
 // that prompt into rules, skills, or tools.
+function tokenCount(t) {
+  if (!t) return 0
+  return (t.input || 0) + (t.output || 0) + (t.reasoning || 0) + (t.cache?.read || 0) + (t.cache?.write || 0)
+}
 function contextNow() {
-  const last = [...messages].reverse().find((m) => m.role === "assistant" && m.tokens)
+  // a failed turn still carries a tokens object of zeros and would hide the
+  // last reply that actually reported usage
+  const last = [...messages].reverse().find((m) => m.role === "assistant" && tokenCount(m.tokens) > 0)
   const running = choices?.current || choices?.default
   const t = last?.tokens
   const used = t ? t.input + t.cache.read + t.cache.write : 0
@@ -2528,6 +2536,10 @@ function renderContext() {
   arc.style.stroke = pct >= 0.8 ? "var(--accent)" : "currentColor"
   $("ctxRing").title = limit ? `${tokens(used)} / ${tokens(limit)} context` : used ? `${tokens(used)} context` : "No context yet"
   if ($("ctx").hidden) return
+  if (!t) {
+    $("ctx").replaceChildren(el("h3", "", "Context"), el("div", "ctx-top", "No token use reported for this chat yet."))
+    return
+  }
   const slices = [
     ["Input", t?.input || 0, "#5b8def"],
     ["Cache read", t?.cache.read || 0, "#c4a35a"],
@@ -2709,6 +2721,7 @@ let termAllowed = false
 let termWatch = null
 let termLog = ""
 let jobsKey = ""
+const shellSeen = new Map()
 function shells() {
   const byId = new Map()
   const parts = []
@@ -2721,7 +2734,10 @@ function shells() {
     const args = typeof p.input === "object" && p.input ? p.input : {}
     const command = String(args.command || args.cmd || p.title || "shell").split("\n")[0]
     const text = (p.output == null || p.output === "" ? "" : typeof p.output === "string" ? p.output : JSON.stringify(p.output, null, 2)).replace(/<\/?shell_metadata>/g, "").trim()
-    byId.set(p.id || command, { id: p.id || command, command, running: p.status === "running" || p.status === "pending", text })
+    const id = p.id || command
+    const started = typeof p.startedAt === "number" ? p.startedAt : shellSeen.get(id)
+    if (started == null) shellSeen.set(id, Date.now())
+    byId.set(id, { id, command, running: p.status === "running" || p.status === "pending", text, started: started ?? shellSeen.get(id) })
   }
   const rows = [...byId.values()]
   return [...rows.filter((r) => r.running), ...rows.filter((r) => !r.running).slice(-6).reverse()]
@@ -2734,16 +2750,28 @@ function syncTermBtn() {
   $("termChipLabel").textContent = jobs.length === 1 ? "1 Terminal" : jobs.length + " Terminals"
   if (!jobs.length) $("termChipList").hidden = true
   const key = jobs.map((j) => j.id).join("|")
-  if (key === jobsKey) return
+  if (key === jobsKey) { chipAges(); return }
   jobsKey = key
   $("termChipList").replaceChildren(...jobs.map((j) => {
-    const name = el("button", "name", j.command)
+    const name = el("button", "name")
     name.type = "button"
     name.title = j.command
+    name.append(el("span", "cmd", j.command), el("span", "age", j.started ? span(Date.now() - j.started) : ""))
     name.onclick = () => openShell(j.id).catch((err) => fail(err))
     return name
   }))
 }
+function chipAges() {
+  if ($("termChip").hidden || $("termChipList").hidden) return
+  const jobs = shells().filter((s) => s.running)
+  const buttons = [...$("termChipList").querySelectorAll(".name")]
+  if (buttons.length !== jobs.length) { jobsKey = ""; syncTermBtn(); return }
+  jobs.forEach((j, i) => {
+    const age = buttons[i].querySelector(".age")
+    if (age && j.started) age.textContent = span(Date.now() - j.started)
+  })
+}
+setInterval(chipAges, 1000)
 function renderShells() {
   syncTermBtn()
   if (termWatch) paintLog()
