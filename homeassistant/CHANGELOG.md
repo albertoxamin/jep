@@ -1,5 +1,10 @@
 # Changelog — the HA app
 
+## 0.3.10
+
+A failed turn writes the provider's sentence in the chat, under the
+message, not only in a toast or a raw 500.
+
 ## 0.3.9
 
 Changes follow the repository the edited files belong to, when that is not

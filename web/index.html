@@ -93,6 +93,7 @@
   }
   .msg.user:hover .retry-send, .msg.user.keep-actions .retry-send { display: inline-block; }
   .retry-send:hover { color: var(--text); background: none; }
+  .fail-note { margin: 6px 0 0; color: var(--accent); font-size: 13px; white-space: pre-wrap; }
   .msg.user[data-info]:hover::after { right: 42px; }
   .msg.user .text a { color: #fff; }
   .msg.user details { color: #fffc; }
@@ -1174,7 +1175,7 @@ function render(follow = true) {
   const inQueue = (p) => queue.some((q) => q.clientID && q.clientID === p.clientID) || !!p.expectQueue
   const all = [
     ...messages,
-    ...pendingText.filter((p) => !inQueue(p)).map((p) => ({ role: "user", parts: [{ kind: "text", text: p.text }], undelivered: p.failed, retry: p.retry, sending: !p.failed })),
+    ...pendingText.filter((p) => !inQueue(p)).map((p) => ({ role: "user", parts: [{ kind: "text", text: p.text }], undelivered: p.failed, errorText: p.error, retry: p.retry, sending: !p.failed })),
     ...(live.size ? [{ role: "assistant", id: [...live.values()][0].messageID, parts: [...live.values()].map((l) => l.part), live: true }] : []),
   ]
   // what waits for the next turn is not in the agent's reading yet: it comes
@@ -1507,6 +1508,7 @@ function transcript(all) {
         node.querySelector(".body").dataset.state = "Sending…"
       } else sentActions(node, m)
       if (failed) node.classList.add("keep-actions")
+      if (m.errorText) node.append(failNote(m.errorText))
       out.push(node)
       continue
     }
@@ -1523,12 +1525,26 @@ function transcript(all) {
     }
     // a reply's details ride on the last thing it said
     if (out.length > before && !run.length) out[out.length - 1].dataset.info = replyInfo(m)
+    if (m.error) out.push(failNote(errorText(m.error)))
   }
   flush(true)
   return out
 }
 
 // "14:32 · claude-opus-5-5 · 1m 13s · 171k in, 300 out · $0.42", whatever the harness reported
+function errorText(e) {
+  if (!e) return ""
+  if (typeof e === "string") return e
+  const loc = e.provider && e.model ? `${e.provider}/${e.model}` : (e.provider || e.model || "")
+  const tags = [loc, e.status ? `HTTP ${e.status}` : ""].filter(Boolean).join(", ")
+  const name = e.name && !/^error$/i.test(e.name) ? e.name : ""
+  return [name && tags ? `${name} (${tags})` : name || tags, e.message || "The turn failed"].filter(Boolean).join(": ")
+}
+function failNote(text) {
+  const n = el("div", "fail-note", "⚠️ " + text)
+  return n
+}
+
 function replyInfo(m) {
   const t = m.tokens
   return [
@@ -1803,6 +1819,7 @@ function sendPending(id, pending, how, throwOnFailure = false) {
       .catch((err) => {
         if (id === current) {
           pending.failed = true
+          pending.error = String(err.message || err)
           render()
           fail(err)
           if (retry || throwOnFailure) throw err

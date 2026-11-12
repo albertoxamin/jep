@@ -2962,7 +2962,10 @@ export class TelegramBot {
           if (shown) await this.#tg.sendMessage({ chatID, text: "⚠️ the AI server dropped the connection — the answer above may be incomplete." })
           else await this.#tg.sendMessage({ chatID, text: "⚠️ the AI server dropped the connection before an answer arrived." })
         } else {
-          const text = (dropped ? "⚠️ the AI server dropped the connection." : `⚠️ ${msg}`).slice(-MAX_MSG)
+          let msg = (err as Error).message
+        const named = ws?.adapter.providerError?.(sessionID)
+        if (named && /unexpected server error|prompt -> \d+/i.test(msg)) msg = describeError(named)
+        const text = (dropped ? "⚠️ the AI server dropped the connection." : `⚠️ ${msg}`).slice(0, MAX_MSG)
           if (placeholder) {
             lastText = text
             lastHadMarkup = false
