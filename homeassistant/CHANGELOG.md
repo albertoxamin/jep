@@ -1,5 +1,10 @@
 # Changelog — the HA app
 
+## 0.3.12
+
+A provider failure the harness only writes to its log is sent to the open
+chat. The rate-limit line shows under the message, not only in the log.
+
 ## 0.3.11
 
 A provider failure stays in the chat after the message is saved. The

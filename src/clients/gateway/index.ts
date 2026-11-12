@@ -975,6 +975,7 @@ export async function startGateway(deps: GatewayDeps): Promise<GatewayHandle> {
       mcpOf,
       openAsks: (id) => asksBySession.get(id)?.size ?? 0,
       recordChanged: (id) => void msgCache.delete(id),
+      report: (evt) => broadcast(evt),
       loopChanged: (all, sessionID) => {
         detach("save loops", saveLoops(deps.dataHome, all))
         broadcast({ type: "session.changed", sessionID })
