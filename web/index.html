@@ -91,7 +91,7 @@
     background: none; font-size: 11px; line-height: 1.55; text-decoration: underline dotted;
     text-underline-offset: 3px;
   }
-  .msg.user:hover .retry-send { display: inline-block; }
+  .msg.user:hover .retry-send, .msg.user.keep-actions .retry-send { display: inline-block; }
   .retry-send:hover { color: var(--text); background: none; }
   .msg.user[data-info]:hover::after { right: 42px; }
   .msg.user .text a { color: #fff; }
@@ -209,7 +209,7 @@
   #forceNow button.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
   .msg.queued-msg.editing .body { opacity: .3; outline: 2px dashed currentColor; outline-offset: 2px; }
   .queued-actions, .msg-actions { display: none; position: absolute; right: 0; top: calc(100% + 1px); gap: 10px; }
-  .msg.user:hover .queued-actions, .msg.user:hover .msg-actions, .queued-actions:focus-within, .msg-actions:focus-within { display: flex; }
+  .msg.user:hover .queued-actions, .msg.user:hover .msg-actions, .queued-actions:focus-within, .msg-actions:focus-within, .msg.user.keep-actions .msg-actions { display: flex; }
   .queued-actions button, .msg-actions button { border: none; padding: 0 2px; background: none; color: var(--dim); font-size: 11px; line-height: 1.55; text-decoration: underline dotted; text-underline-offset: 3px; }
   .queued-actions button:hover, .msg-actions button:hover { color: var(--text); background: none; }
   .msg.queued-msg[data-info]:hover::after, .msg.has-actions[data-info]:hover::after { right: 90px; }
@@ -1477,7 +1477,17 @@ function transcript(all) {
     else if (run.length > 1) out.push(assistant(workFold(run, last && busy())))
     run = []
   }
-  for (const m of settleCompaction(all)) {
+  const list = settleCompaction(all)
+  const turnFailed = (i) => {
+    for (let j = i + 1; j < list.length; j++) {
+      const n = list[j]
+      if (n.role === "user" && !n.loop && !n.notice && !n.from && !saysNothing(n)) return false
+      if (n.error) return true
+    }
+    return false
+  }
+  for (let i = 0; i < list.length; i++) {
+    const m = list[i]
     if (m.role === "user") {
       flush()
       if (isCompactionOnly(m)) { out.push(compactionNode()); continue }
@@ -1486,16 +1496,17 @@ function transcript(all) {
       if (m.notice) { out.push(wakeNode(m.notice)); continue }
       if (m.from) { out.push(guestNode(m)); continue }
       if (saysNothing(m)) continue
-      // a send that failed carries its own Retry; a sent one gets Edit and Retry
-      const failed = !m.queued && !!m.undelivered
-      const node = messageNode("user", m.parts, failed ? m.retry || (() => retryMessage(m)) : null, m.id)
+      // a failed send, or a reply that came back as an error, keeps Edit and Retry on screen
+      const failed = !m.queued && (!!m.undelivered || turnFailed(i))
+      const node = messageNode("user", m.parts, null, m.id)
       node.prepend(userNav(node))
       if (m.time) node.dataset.info = when(m.time)
       if (m.queued) queuedMark(node, m.queued)
       else if (m.sending) {
         node.classList.add("sending")
         node.querySelector(".body").dataset.state = "Sending…"
-      } else if (!failed) sentActions(node, m)
+      } else sentActions(node, m)
+      if (failed) node.classList.add("keep-actions")
       out.push(node)
       continue
     }

@@ -1,5 +1,10 @@
 # Changelog — the HA app
 
+## 0.3.8
+
+When a message fails, Edit and Retry stay under it. They no longer wait
+for a hover.
+
 ## 0.3.7
 
 A failed prompt in the chat names the provider error, such as
