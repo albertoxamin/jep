@@ -15,6 +15,7 @@ import { MCP_SERVER_PATH, TOOLS_SERVER, toolsMode, wantsMcp } from "../core/tool
 import { quoteBlock, readQuoteBlock, contextFor } from "../core/transcript.ts"
 import { parseOptionIDs } from "../core/questions.ts"
 import { describeError } from "../core/errors.ts"
+import { parseOpencodeLogError } from "./opencode-log.ts"
 import { detach } from "../core/detach.ts"
 import { setTimeout as pollDelay } from "node:timers/promises"
 const OPENCODE_BIN = process.env.OPENCODE_BIN ?? "opencode"
