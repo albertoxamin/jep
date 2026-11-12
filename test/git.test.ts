@@ -6,10 +6,10 @@
 import { test } from "node:test"
 import assert from "node:assert/strict"
 import { execFileSync } from "node:child_process"
-import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from "node:fs"
+import { mkdtempSync, mkdirSync, realpathSync, rmSync, writeFileSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
-import { fileDiff, fullDiff, isRepo, parseNumstat, parsePorcelain, push, repoStatus } from "../src/core/git.ts"
+import { fileDiff, fullDiff, isRepo, parseNumstat, parsePorcelain, push, repoContaining, repoStatus } from "../src/core/git.ts"
 
 test("porcelain: branch, upstream and ahead/behind", () => {
   const out = [
@@ -354,4 +354,19 @@ test("push refuses to guess when there is no upstream and no remote named", asyn
   const r = await push(dir, { setUpstream: true })
   assert.equal(r.ok, false)
   assert.match(r.message, /no remote/)
+})
+
+test("edited files name their own repo when the workspace is not one", async (t) => {
+  const parent = mkdtempSync(join(tmpdir(), "jep-git-parent-"))
+  const child = join(parent, "proj")
+  mkdirSync(child)
+  t.after(() => rmSync(parent, { recursive: true, force: true }))
+  execFileSync("git", ["init", "-q", "-b", "main"], { cwd: child })
+  execFileSync("git", ["config", "user.email", "t@t"], { cwd: child })
+  execFileSync("git", ["config", "user.name", "T"], { cwd: child })
+  writeFileSync(join(child, "a.txt"), "a\n")
+  execFileSync("git", ["add", "a.txt"], { cwd: child })
+  execFileSync("git", ["commit", "-qm", "init"], { cwd: child })
+  assert.equal(await repoContaining([join(child, "src", "main.ts"), join(child, "src", "main.ts")], parent), realpathSync(child))
+  assert.equal(await repoContaining([], parent), parent)
 })

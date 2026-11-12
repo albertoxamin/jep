@@ -16,7 +16,7 @@ import { describeAsk } from "../../core/asks.ts"
 import { hasMcp, parseConversationMcp, type ConversationMcp } from "../../core/mcp.ts"
 import { pushFor, UnregisteredToken, type PushNotifier } from "../../core/push.ts"
 import { LIVENESS, type LivenessConfig } from "../../core/liveness.ts"
-import { isRepo, repoStatus } from "../../core/git.ts"
+import { isRepo, repoContaining, repoStatus } from "../../core/git.ts"
 import { listSkills, defaultSkillDirs, writeSkillModelInvocation } from "../../core/skills.ts"
 import type { AskRequest, DomainEvent, Message, Part } from "../../core/types.ts"
 import { renderCarryover } from "../../core/carryover.ts"
@@ -173,6 +173,23 @@ function raceTimeout<T>(p: Promise<T>, ms: number, what: string): Promise<T> {
       },
     )
   })
+}
+
+/** Absolute paths named by edit/read tools in this conversation. */
+function editedPaths(messages: { parts: { kind: string; input?: unknown }[] }[], workspace: string): string[] {
+  const out: string[] = []
+  for (const message of messages) {
+    for (const part of message.parts) {
+      if (part.kind !== "tool" || !part.input || typeof part.input !== "object") continue
+      const input = part.input as Record<string, unknown>
+      for (const key of ["filePath", "file_path", "path"]) {
+        const value = input[key]
+        if (typeof value !== "string" || !value || value.startsWith("-")) continue
+        out.push(isAbsolute(value) ? value : resolve(workspace, value))
+      }
+    }
+  }
+  return out
 }
 
 // The phone's Git screen, shaped from the core's view of the repository — the
@@ -1854,7 +1871,9 @@ export async function startGateway(deps: GatewayDeps): Promise<GatewayHandle> {
       // The log belongs to the workspace, not a harness-specific diff
       // implementation. The client supplies no command and no path.
       if (path === "/git") {
-        return json(res, 200, await gitView(adapter.workspace))
+        const rows = await adapter.messages(id, { limit: 100 }).catch(() => [])
+        const dir = await repoContaining(editedPaths(rows, adapter.workspace), adapter.workspace)
+        return json(res, 200, await gitView(dir))
       }
 
       // Compress this conversation's context (opencode "compact"). The port is

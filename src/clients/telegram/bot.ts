@@ -28,7 +28,7 @@ import { matches, rankHits, snippet } from "./search.ts"
 import type { Hit } from "./search.ts"
 import { IMAGE_RE, VOICE_MAX_SEC, audioOf, imageExt, sniffAudioExt, sniffImageExt, stickerPrompt } from "./media.ts"
 import type { AudioIn } from "./media.ts"
-import { commits as gitCommits, fileDiff, fullDiff, isRepo, push as gitPush, repoStatus } from "../../core/git.ts"
+import { commits as gitCommits, fileDiff, fullDiff, isRepo, push as gitPush, repoContaining, repoStatus } from "../../core/git.ts"
 import type { GitFile, GitStatus } from "../../core/git.ts"
 import { judgeTurn, LIVENESS } from "../../core/liveness.ts"
 import { clipTitle, fmtCount, fmtDuration, fmtHome, fmtWsPath, timeAgo } from "./fmt.ts"
@@ -3239,7 +3239,24 @@ export class TelegramBot {
   // not a side effect of looking.
   async #gitView(chatID: number, messageID: number | null): Promise<void> {
     const c = this.#chat(chatID)
-    const dir = this.#activeWs(chatID).dir
+    const ws = this.#activeWs(chatID)
+    let dir = ws.dir
+    if (c.sessionID) {
+      const rows = await ws.adapter.messages(c.sessionID, { limit: 100 }).catch(() => [])
+      const files: string[] = []
+      for (const message of rows) {
+        for (const part of message.parts) {
+          if (part.kind !== "tool" || !part.input || typeof part.input !== "object") continue
+          const input = part.input as Record<string, unknown>
+          for (const key of ["filePath", "file_path", "path"]) {
+            const value = input[key]
+            if (typeof value !== "string" || !value || value.startsWith("-")) continue
+            files.push(value.startsWith("/") ? value : `${ws.dir}/${value}`)
+          }
+        }
+      }
+      dir = await repoContaining(files, ws.dir)
+    }
     const fail = async (text: string) => {
       c.git = null
       if (messageID === null) await this.#tg.sendMessage({ chatID, text })

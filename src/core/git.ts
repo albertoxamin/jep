@@ -17,7 +17,7 @@
 import { execFile } from "node:child_process"
 import { promisify } from "node:util"
 import { readFile, stat } from "node:fs/promises"
-import { join } from "node:path"
+import { dirname, join } from "node:path"
 
 const execFileAsync = promisify(execFile)
 
@@ -102,6 +102,47 @@ export async function isRepo(dir: string): Promise<boolean> {
 export async function repoRoot(dir: string): Promise<string | null> {
   const r = await git(dir, ["rev-parse", "--show-toplevel"])
   return r.ok ? r.out.trim() || null : null
+}
+
+/** The repo these edited files live in. The root that holds the most of them
+ * wins. A tie keeps `fallback` when that is one of the roots. No repo among
+ * them: `fallback`, which is the conversation's workspace. */
+async function existingDir(start: string): Promise<string> {
+  let dir = start
+  for (;;) {
+    try {
+      if ((await stat(dir)).isDirectory()) return dir
+    } catch { /* a new file's folder may not exist yet */ }
+    const parent = dirname(dir)
+    if (parent === dir) return dir
+    dir = parent
+  }
+}
+
+export async function repoContaining(files: string[], fallback: string): Promise<string> {
+  const counts = new Map<string, number>()
+  const cached = new Map<string, string | null>()
+  for (const file of files) {
+    const dir = await existingDir(dirname(file))
+    let root = cached.get(dir)
+    if (root === undefined) {
+      root = await repoRoot(dir)
+      cached.set(dir, root)
+    }
+    if (!root) continue
+    counts.set(root, (counts.get(root) ?? 0) + 1)
+  }
+  if (!counts.size) return fallback
+  const home = await repoRoot(fallback)
+  let best = fallback
+  let n = -1
+  for (const [root, count] of counts) {
+    if (count > n || (count === n && home != null && root === home)) {
+      best = root
+      n = count
+    }
+  }
+  return best
 }
 
 // porcelain v2 is the only status format with a documented, stable grammar —

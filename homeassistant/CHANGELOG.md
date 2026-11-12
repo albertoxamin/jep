@@ -1,5 +1,10 @@
 # Changelog — the HA app
 
+## 0.3.9
+
+Changes follow the repository the edited files belong to, when that is not
+the workspace itself.
+
 ## 0.3.8
 
 When a message fails, Edit and Retry stay under it. They no longer wait
